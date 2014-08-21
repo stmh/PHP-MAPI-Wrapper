@@ -14,18 +14,18 @@
  *
  * CONTRIBUTORS:
  *	 Luke Weber, Brandon Aaskov
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the “Software”),
  * to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, alter, merge, publish, distribute,
  * sublicense, and/or sell copies of the Software, and to permit persons to
  * whom the Software is furnished to do so, subject to the following conditions:
- *   
+ *
  * 1. The permission granted herein does not extend to commercial use of
  * the Software by entities primarily engaged in providing online video and
  * related services.
- *  
+ *
  * 2. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT ANY WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, SUITABILITY, TITLE,
@@ -34,7 +34,7 @@
  * CLAIM, DAMAGES OR OTHER LIABILITY WHATSOEVER, WHETHER IN AN ACTION OF
  * CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH
  * THE SOFTWARE OR THE USE, INABILITY TO USE, OR OTHER DEALINGS IN THE SOFTWARE.
- *  
+ *
  * 3. NONE OF THE AUTHORS, CONTRIBUTORS, NOR BRIGHTCOVE SHALL BE RESPONSIBLE
  * IN ANY MANNER FOR USE OF THE SOFTWARE.  THE SOFTWARE IS PROVIDED FOR YOUR
  * CONVENIENCE AND ANY USE IS SOLELY AT YOUR OWN RISK.  NO MAINTENANCE AND/OR
@@ -73,6 +73,7 @@ class BCMAPI
 	private $timeout_retry = FALSE;
 	private $token_read = NULL;
 	private $token_write = NULL;
+	private $proxy_settings = array();
 	private $url_read = 'api.brightcove.com/services/library?';
 	private $url_write = 'api.brightcove.com/services/post';
 	private $valid_types = array(
@@ -86,13 +87,55 @@ class BCMAPI
 	 * @since 0.1.0
 	 * @param string [$token_read] The read API token for the Brightcove account
 	 * @param string [$token_write] The write API token for the Brightcove account
+	 * @param array [$proxy_settings] an array with your proxy settings
 	 */
-	public function __construct($token_read = NULL, $token_write = NULL)
+	public function __construct($token_read = NULL, $token_write = NULL, $proxy_settings = array())
 	{
 		$this->token_read = $token_read;
 		$this->token_write = $token_write;
+		$this->setProxySettings($proxy_settings);
 		$this->bit32 = ((string)'99999999999999' == (int)'99999999999999') ? FALSE : TRUE;
 	}
+
+	/**
+	 * set the proxy settings
+	 * @access Public
+	 * @since 2.0.5
+	 * @param array [$proxy_settings] an array with your proxy settings
+	 */
+	public function setProxySettings($proxy_settings) {
+
+		$this->proxy_settings = array();
+		if (empty($proxy_settings['host']))
+			return;
+
+		if (!isset($proxy_settings['type']))
+			$proxy_settings['type'] = CURLPROXY_HTTP;
+
+		foreach($proxy_settings as $key => $value) {
+			switch($key) {
+				case 'type':
+					$this->proxy_settings[CURLOPT_PROXYTYPE] = $value;
+					break;
+
+				case 'host':
+					$this->proxy_settings[CURLOPT_PROXY] = $value;
+					break;
+
+				case 'port':
+					$this->proxy_settings[CURLOPT_PROXYPORT] = $value;
+					break;
+
+				case 'user':
+					if(!empty($proxy_settings['pass']))
+						$this->proxy_settings[CURLOPT_PROXYUSERPWD] = $value . ':' .$proxy_settings['pass'];
+					break;
+					
+			}
+		}
+
+	}
+
 
 	/**
 	 * Sets a property of the BCMAPI class.
@@ -352,7 +395,7 @@ class BCMAPI
 
 			$current_page++;
 		}
-		
+
 		$this->timeout_current = 0;
 
 		return $assets;
@@ -420,7 +463,7 @@ class BCMAPI
 		}
 
 		$url = str_replace(array('%2526', '%253D'), array('&', '='), $this->appendParams('search_' . $type . 's', $params));
-		
+
 		$this->timeout_current = 0;
 
 		return $this->getData($url);
@@ -449,21 +492,21 @@ class BCMAPI
 					if(isset($options['encode_to']))
 					{
 						unset($options['encode_to']);
-						
+
 						throw new BCMAPIInvalidUploadOption($this, self::ERROR_INVALID_UPLOAD_OPTION);
 					}
 
 					if(isset($options['create_multiple_renditions']))
 					{
 						$options['create_multiple_renditions'] = 'FALSE';
-						
+
 						throw new BCMAPIInvalidUploadOption($this, self::ERROR_INVALID_UPLOAD_OPTION);
 					}
 
 					if(isset($options['preserve_source_rendition']))
 					{
 						unset($options['preserve_source_rendition']);
-						
+
 						throw new BCMAPIInvalidUploadOption($this, self::ERROR_INVALID_UPLOAD_OPTION);
 					}
 				}
@@ -471,7 +514,7 @@ class BCMAPI
 				if((isset($options['create_multiple_renditions']) && $options['create_multiple_renditions'] === TRUE) && (isset($options['H264NoProcessing']) && $options['H264NoProcessing'] === TRUE))
 				{
 					unset($options['H264NoProcessing']);
-					
+
 					throw new BCMAPIInvalidUploadOption($this, self::ERROR_INVALID_UPLOAD_OPTION);
 				}
 			}
@@ -1333,7 +1376,7 @@ class BCMAPI
 			{
 				throw new BCMAPIApiError($this, self::ERROR_API_ERROR, $response_object);
 			}
-			
+
 			return $response_object;
 		}
 	}
@@ -1357,6 +1400,13 @@ class BCMAPI
 			curl_setopt($curl, CURLOPT_URL, $this->getUrl('write'));
 			curl_setopt($curl, CURLOPT_POST, 1);
 			curl_setopt($curl, CURLOPT_POSTFIELDS, $request);
+		}
+
+		// set proxy options
+		if (!empty($this->proxy_settings)) {
+			foreach($this->proxy_settings as $key => $value) {
+				curl_setopt($curl, $key, $value);
+			}
 		}
 
 		curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
@@ -1418,7 +1468,7 @@ class BCMAPI
 			return TRUE;
 		}
 	}
-	
+
 	/**
 	 * Dummy method for backwards compatability
 	 * @todo Deprecate in > 2.1.0
@@ -1427,7 +1477,7 @@ class BCMAPI
 	{
 		return $this->tagsFilter($assets, $tags);
 	}
-	
+
 	/**
 	 * Dummy method for backwards compatability
 	 * @todo Deprecate in > 2.1.0
@@ -1436,7 +1486,7 @@ class BCMAPI
 	{
 		return $this->convertTags($tags, $implode);
 	}
-	
+
 	/**
 	 * Dummy method for backwards compatability
 	 * @todo Deprecate in > 2.1.0
@@ -1537,7 +1587,7 @@ class BCMAPIException extends Exception
 			{
 				$raw_error = $raw_error->error;
 			}
-			
+
 			$error .= "'\n";
 			$error .= (isset($raw_error->message) && isset($raw_error->code)) ? '== ' . $raw_error->message . ' (' . $raw_error->code . ') ==' . "\n" : '';
 			$error .= isset($raw_error->errors[0]) ? '== ' . $raw_error->errors[0]->error . ' (' . $raw_error->errors[0]->code . ') ==' . "\n" : '';
